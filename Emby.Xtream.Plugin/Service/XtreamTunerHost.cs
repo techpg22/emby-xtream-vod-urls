@@ -116,8 +116,8 @@ namespace Emby.Xtream.Plugin.Service
                     continue;
                 }
 
-                var title = LiveTvService.DecodeBase64(p.Title);
-                var description = LiveTvService.DecodeBase64(p.Description);
+                var title = p.IsPlainText ? p.Title : LiveTvService.DecodeBase64(p.Title);
+                var description = p.IsPlainText ? p.Description : LiveTvService.DecodeBase64(p.Description);
 
                 result.Add(new ProgramInfo
                 {
@@ -127,6 +127,9 @@ namespace Emby.Xtream.Plugin.Service
                     EndDate = DateTimeOffset.FromUnixTimeSeconds(p.StopTimestamp).UtcDateTime,
                     Name = string.IsNullOrEmpty(title) ? "Unknown" : title,
                     Overview = string.IsNullOrEmpty(description) ? null : description,
+                    IsLive = p.IsLive,
+                    IsRepeat = p.IsPreviouslyShown,
+                    IsPremiere = p.IsNew || p.IsPremiere,
                 });
             }
 

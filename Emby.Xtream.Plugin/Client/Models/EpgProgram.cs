@@ -36,5 +36,12 @@ namespace Emby.Xtream.Plugin.Client.Models
 
         [JsonPropertyName("has_archive")]
         public int HasArchive { get; set; }
+
+        // Not from JSON — populated by XMLTV parser only
+        [JsonIgnore] public bool IsLive { get; set; }
+        [JsonIgnore] public bool IsNew { get; set; }
+        [JsonIgnore] public bool IsPreviouslyShown { get; set; }
+        [JsonIgnore] public bool IsPremiere { get; set; }
+        [JsonIgnore] public bool IsPlainText { get; set; }
     }
 }
