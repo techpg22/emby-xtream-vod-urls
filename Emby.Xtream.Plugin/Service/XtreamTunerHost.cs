@@ -250,7 +250,10 @@ namespace Emby.Xtream.Plugin.Service
                 string listingsChannelId = null;
                 if (config.EnableGracenoteMatching
                     && _stationIdMap.TryGetValue(channel.StreamId, out var stationId))
+                {
                     listingsChannelId = stationId;
+                    Logger.Debug("Stream {0} ({1}): ListingsChannelId = {2}", channel.StreamId, cleanName, stationId);
+                }
 
                 return new ChannelInfo
                 {
