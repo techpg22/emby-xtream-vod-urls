@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipelines;
 using System.Net.Http;
@@ -6,20 +7,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
+using MediaBrowser.Model.Logging;
 
 namespace Emby.Xtream.Plugin.Service
 {
     internal sealed class XtreamLiveStream : ILiveStream, IDisposable
     {
         private readonly HttpClient _httpClient;
+        private readonly ILogger _logger;
         private HttpResponseMessage _response;
         private Stream _stream;
         private bool _disposed;
 
-        public XtreamLiveStream(MediaSourceInfo mediaSource, string tunerHostId, HttpClient httpClient)
+        public XtreamLiveStream(MediaSourceInfo mediaSource, string tunerHostId, HttpClient httpClient, ILogger logger = null)
         {
             MediaSource = mediaSource;
             _httpClient = httpClient;
+            _logger = logger;
             UniqueId = Guid.NewGuid().ToString("N");
             TunerHostId = tunerHostId;
             OriginalStreamId = mediaSource.Id;
@@ -37,12 +41,17 @@ namespace Emby.Xtream.Plugin.Service
 
         public async Task Open(CancellationToken openCancellationToken)
         {
+            var sw = Stopwatch.StartNew();
             _response = await _httpClient.GetAsync(
                 MediaSource.Path,
                 HttpCompletionOption.ResponseHeadersRead,
                 openCancellationToken).ConfigureAwait(false);
+            _logger?.Info("[stream-timing] Open.HttpGet={0}ms status={1}", sw.ElapsedMilliseconds, (int)_response.StatusCode);
+            sw.Restart();
+
             _response.EnsureSuccessStatusCode();
             _stream = await _response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            _logger?.Info("[stream-timing] Open.StreamReady={0}ms", sw.ElapsedMilliseconds);
         }
 
         public Task Close()

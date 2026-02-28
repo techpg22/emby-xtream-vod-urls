@@ -342,10 +342,17 @@ namespace Emby.Xtream.Plugin.Service
                 return new List<MediaSourceInfo>();
             }
 
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
             await EnsureStatsLoadedAsync(cancellationToken).ConfigureAwait(false);
+            Logger.Info("[stream-timing] ch={0} EnsureStats={1}ms", tunerChannel?.Name, sw.ElapsedMilliseconds);
+            sw.Restart();
 
             var config = Plugin.Instance.Configuration;
             var (streamUrl, isDispatcharr) = BuildStreamUrl(config, streamId);
+            Logger.Info("[stream-timing] ch={0} BuildUrl={1}ms isDispatcharr={2}", tunerChannel?.Name, sw.ElapsedMilliseconds, isDispatcharr);
+            sw.Restart();
+
             if (streamUrl == null)
             {
                 return new List<MediaSourceInfo>();
@@ -354,6 +361,7 @@ namespace Emby.Xtream.Plugin.Service
             _streamStats.TryGetValue(streamId, out var stats);
 
             var mediaSource = CreateMediaSourceInfo(streamId, streamUrl, stats, isDispatcharr, config.ForceAudioTranscode);
+            Logger.Info("[stream-timing] ch={0} CreateMediaSource={1}ms hasStats={2}", tunerChannel?.Name, sw.ElapsedMilliseconds, stats != null);
 
             return new List<MediaSourceInfo> { mediaSource };
         }
@@ -369,7 +377,11 @@ namespace Emby.Xtream.Plugin.Service
                     string.Format("Channel {0} not found in Xtream tuner", tunerChannel?.Id));
             }
 
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
             await EnsureStatsLoadedAsync(cancellationToken).ConfigureAwait(false);
+            Logger.Info("[stream-timing] ch={0} EnsureStats={1}ms", tunerChannel?.Name, sw.ElapsedMilliseconds);
+            sw.Restart();
 
             var config = Plugin.Instance.Configuration;
             var (streamUrl, isDispatcharr) = BuildStreamUrl(config, streamId);
@@ -379,10 +391,14 @@ namespace Emby.Xtream.Plugin.Service
                     string.Format("Channel {0}: Dispatcharr proxy unavailable and fallback disabled", streamId));
             }
             _streamStats.TryGetValue(streamId, out var stats);
+            Logger.Info("[stream-timing] ch={0} BuildUrl={1}ms isDispatcharr={2}", tunerChannel?.Name, sw.ElapsedMilliseconds, isDispatcharr);
+            sw.Restart();
 
             var mediaSource = CreateMediaSourceInfo(streamId, streamUrl, stats, isDispatcharr, config.ForceAudioTranscode);
+            Logger.Info("[stream-timing] ch={0} CreateMediaSource={1}ms hasStats={2}", tunerChannel?.Name, sw.ElapsedMilliseconds, stats != null);
+
             var httpClient = new HttpClient();
-            ILiveStream liveStream = new XtreamLiveStream(mediaSource, tuner.Id, httpClient);
+            ILiveStream liveStream = new XtreamLiveStream(mediaSource, tuner.Id, httpClient, Logger);
 
             Logger.Info("Opening live stream for channel {0} (stream {1})",
                 tunerChannel?.Name ?? tunerChannel?.Id, streamId);
