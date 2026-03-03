@@ -640,7 +640,15 @@ namespace Emby.Xtream.Plugin.Service
             bool disableProbing = false, bool forceAudioTranscode = false)
         {
             var sourceId = "xtream_live_" + streamId.ToString(CultureInfo.InvariantCulture);
-            bool hasStats = stats?.VideoCodec != null;
+
+            // Audio-only channel: Dispatcharr stats are present but no video_codec exists.
+            // The normal hasStats gate (VideoCodec != null) would fall through to the dummy
+            // H.264 fallback, which causes Emby to expect a video stream that isn't there.
+            bool isAudioOnly = stats != null
+                && stats.VideoCodec == null
+                && !string.IsNullOrEmpty(stats.AudioCodec);
+
+            bool hasStats = stats?.VideoCodec != null || isAudioOnly;
 
             // Disable probing for Dispatcharr proxy URLs: the probe opens a short-lived HTTP
             // connection that Dispatcharr interprets as a client, and when it closes after
@@ -680,39 +688,42 @@ namespace Emby.Xtream.Plugin.Service
             {
                 var mediaStreams = new List<MediaStream>();
 
-                // Parse resolution (e.g. "1920x1080")
-                int width = 0, height = 0;
-                if (!string.IsNullOrEmpty(stats.Resolution))
+                if (!isAudioOnly)
                 {
-                    var parts = stats.Resolution.Split('x');
-                    if (parts.Length == 2)
+                    // Parse resolution (e.g. "1920x1080")
+                    int width = 0, height = 0;
+                    if (!string.IsNullOrEmpty(stats.Resolution))
                     {
-                        int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out width);
-                        int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out height);
+                        var parts = stats.Resolution.Split('x');
+                        if (parts.Length == 2)
+                        {
+                            int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out width);
+                            int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out height);
+                        }
                     }
+
+                    var videoCodec = MapVideoCodec(stats.VideoCodec);
+
+                    var videoStream = new MediaStream
+                    {
+                        Type = MediaStreamType.Video,
+                        Index = 0,
+                        Codec = videoCodec,
+                        IsInterlaced = false,
+                        PixelFormat = "yuv420p",
+                    };
+
+                    if (width > 0) videoStream.Width = width;
+                    if (height > 0) videoStream.Height = height;
+                    if (stats.SourceFps.HasValue)
+                    {
+                        videoStream.RealFrameRate = (float)stats.SourceFps.Value;
+                        videoStream.AverageFrameRate = (float)stats.SourceFps.Value;
+                    }
+                    if (stats.Bitrate.HasValue) videoStream.BitRate = (int)(stats.Bitrate.Value * 1000);
+
+                    mediaStreams.Add(videoStream);
                 }
-
-                var videoCodec = MapVideoCodec(stats.VideoCodec);
-
-                var videoStream = new MediaStream
-                {
-                    Type = MediaStreamType.Video,
-                    Index = 0,
-                    Codec = videoCodec,
-                    IsInterlaced = false,
-                    PixelFormat = "yuv420p",
-                };
-
-                if (width > 0) videoStream.Width = width;
-                if (height > 0) videoStream.Height = height;
-                if (stats.SourceFps.HasValue)
-                {
-                    videoStream.RealFrameRate = (float)stats.SourceFps.Value;
-                    videoStream.AverageFrameRate = (float)stats.SourceFps.Value;
-                }
-                if (stats.Bitrate.HasValue) videoStream.BitRate = (int)(stats.Bitrate.Value * 1000);
-
-                mediaStreams.Add(videoStream);
 
                 // Prefer the audio_channels field from stream_stats when present (Dispatcharr
                 // 0.19.0+ includes it as e.g. "5.1", "2.0", "stereo").  Fall back to
@@ -740,20 +751,42 @@ namespace Emby.Xtream.Plugin.Service
                 mediaStreams.Add(new MediaStream
                 {
                     Type = MediaStreamType.Audio,
-                    Index = 1,
+                    Index = isAudioOnly ? 0 : 1,
                     Codec = audioCodecLower ?? "aac",
                     Channels = audioChannels,
                     ChannelLayout = channelLayout,
+                    SampleRate = stats.SampleRate,
                 });
 
                 mediaSource.MediaStreams = mediaStreams;
 
-                Logger.Debug(
-                    "Stream {0}: using stats - {1} {2}x{3} @{4}fps, audio {5} {6}ch{7}",
-                    streamId, videoCodec, width, height,
-                    stats.SourceFps, audioCodecLower ?? "unknown",
-                    audioChannels.HasValue ? audioChannels.Value.ToString(CultureInfo.InvariantCulture) : "?",
-                    suppressDirectStream ? " [force transcode]" : string.Empty);
+                if (isAudioOnly)
+                {
+                    Logger.Debug(
+                        "Stream {0}: audio-only - {1} {2}ch{3}",
+                        streamId, audioCodecLower ?? "unknown",
+                        audioChannels.HasValue ? audioChannels.Value.ToString(CultureInfo.InvariantCulture) : "?",
+                        suppressDirectStream ? " [force transcode]" : string.Empty);
+                }
+                else
+                {
+                    int width = 0, height = 0;
+                    if (!string.IsNullOrEmpty(stats.Resolution))
+                    {
+                        var parts = stats.Resolution.Split('x');
+                        if (parts.Length == 2)
+                        {
+                            int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out width);
+                            int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out height);
+                        }
+                    }
+                    Logger.Debug(
+                        "Stream {0}: using stats - {1} {2}x{3} @{4}fps, audio {5} {6}ch{7}",
+                        streamId, stats.VideoCodec, width, height,
+                        stats.SourceFps, audioCodecLower ?? "unknown",
+                        audioChannels.HasValue ? audioChannels.Value.ToString(CultureInfo.InvariantCulture) : "?",
+                        suppressDirectStream ? " [force transcode]" : string.Empty);
+                }
             }
             else
             {
