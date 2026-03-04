@@ -748,7 +748,7 @@ namespace Emby.Xtream.Plugin.Service
                     channelLayout = "stereo";
                 }
 
-                mediaStreams.Add(new MediaStream
+                var audioStream = new MediaStream
                 {
                     Type = MediaStreamType.Audio,
                     Index = isAudioOnly ? 0 : 1,
@@ -756,7 +756,17 @@ namespace Emby.Xtream.Plugin.Service
                     Channels = audioChannels,
                     ChannelLayout = channelLayout,
                     SampleRate = stats.SampleRate,
-                });
+                };
+                // For audio-only channels set the bitrate so Emby doesn't assume its
+                // 40 Mbps live-TV default and force a transcode at low quality settings.
+                if (isAudioOnly)
+                {
+                    if (stats.AudioBitrate.HasValue)
+                        audioStream.BitRate = (int)(stats.AudioBitrate.Value * 1000);
+                    else if (stats.Bitrate.HasValue)
+                        audioStream.BitRate = (int)(stats.Bitrate.Value * 1000);
+                }
+                mediaStreams.Add(audioStream);
 
                 mediaSource.MediaStreams = mediaStreams;
 

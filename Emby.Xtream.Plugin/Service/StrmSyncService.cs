@@ -714,17 +714,11 @@ namespace Emby.Xtream.Plugin.Service
                                 var seasonDir = Path.Combine(seriesDir, seasonFolder);
 
                                 // Some providers embed the series name + episode code in the title
-                                // (e.g. "EN - American Gigolo - S01E01"). Strip the duplicate portion
-                                // so the filename doesn't read "Show - S01E01 - EN - Show - S01E01".
-                                var rawEpisodeTitle = episode.Title?.Trim() ?? string.Empty;
-                                if (!string.IsNullOrEmpty(rawEpisodeTitle) && !string.IsNullOrEmpty(seriesName))
-                                {
-                                    rawEpisodeTitle = Regex.Replace(
-                                        rawEpisodeTitle,
-                                        @"[\s\-]*" + Regex.Escape(seriesName) + @"[\s\-]*S\d+E\d+[\s\-]*",
-                                        string.Empty,
-                                        RegexOptions.IgnoreCase).Trim('-', ' ');
-                                }
+                                // (e.g. "EN - American Gigolo - S01E01", "Yago - S01E33 - Episode 33").
+                                // Strip the duplicate portion so the filename doesn't read
+                                // "Show - S01E01 - EN - Show - S01E01".
+                                var rawEpisodeTitle = StripEpisodeTitleDuplicate(
+                                    episode.Title, seriesName, seasonNum, episodeNum);
                                 var episodeTitle = !string.IsNullOrWhiteSpace(rawEpisodeTitle)
                                     ? " - " + SanitizeFileName(rawEpisodeTitle)
                                     : string.Empty;
@@ -1138,6 +1132,42 @@ namespace Emby.Xtream.Plugin.Service
 
             // Priority 4: no ID
             return sanitizedName;
+        }
+
+        /// <summary>
+        /// Strips provider-embedded series name + episode code prefixes from an episode title.
+        /// Handles two patterns:
+        ///   1. "{CleanedSeriesName} - SxxExx" at start/anywhere (full name match)
+        ///   2. "AnyPrefix - SxxExx - ..." where SxxExx matches the exact season/episode numbers
+        /// Returns the human-readable remainder, or empty string if the title was only a prefix.
+        /// </summary>
+        internal static string StripEpisodeTitleDuplicate(string episodeTitle, string seriesName, int seasonNum, int episodeNum)
+        {
+            var result = episodeTitle?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(result))
+                return result;
+
+            // Pass 1: strip "{seriesName} - SxxExx" pattern (handles clean name match including year)
+            if (!string.IsNullOrEmpty(seriesName))
+            {
+                result = Regex.Replace(
+                    result,
+                    @"[\s\-]*" + Regex.Escape(seriesName) + @"[\s\-]*S\d+E\d+[\s\-]*",
+                    string.Empty,
+                    RegexOptions.IgnoreCase).Trim('-', ' ');
+            }
+
+            // Pass 2: if the exact episode code still appears (e.g. provider used a short series
+            // name without the year), strip everything up to and including that code.
+            // "Yago - S01E33 - Episode 33" → "Episode 33"
+            var episodeCode = string.Format(CultureInfo.InvariantCulture, "S{0:D2}E{1:D2}", seasonNum, episodeNum);
+            var codeIdx = result.IndexOf(episodeCode, StringComparison.OrdinalIgnoreCase);
+            if (codeIdx >= 0)
+            {
+                result = result.Substring(codeIdx + episodeCode.Length).Trim('-', ' ');
+            }
+
+            return result;
         }
 
         internal static string SanitizeFileName(string name)

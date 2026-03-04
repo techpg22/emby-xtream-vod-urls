@@ -129,7 +129,9 @@ namespace Emby.Xtream.Plugin.Client
                     if (!string.IsNullOrEmpty(ch.TvcGuideStationId) && !stationIdMap.ContainsKey(sid))
                         stationIdMap[sid] = ch.TvcGuideStationId;
 
-                    if (stream.StreamStats?.VideoCodec != null && !statsMap.ContainsKey(sid))
+                    if (stream.StreamStats != null
+                        && (stream.StreamStats.VideoCodec != null || !string.IsNullOrEmpty(stream.StreamStats.AudioCodec))
+                        && !statsMap.ContainsKey(sid))
                         statsMap[sid] = stream.StreamStats;
 
                     allowedStreamIds?.Add(sid);
@@ -150,7 +152,8 @@ namespace Emby.Xtream.Plugin.Client
 
                 foreach (var stream in ch.Streams)
                 {
-                    if (stream.StreamStats?.VideoCodec != null)
+                    if (stream.StreamStats != null
+                        && (stream.StreamStats.VideoCodec != null || !string.IsNullOrEmpty(stream.StreamStats.AudioCodec)))
                     {
                         statsMap[ch.Id] = stream.StreamStats;
                         break;
