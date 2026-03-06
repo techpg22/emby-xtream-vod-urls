@@ -160,34 +160,9 @@ namespace Emby.Xtream.Plugin.Service
 
                 var title = p.IsPlainText ? p.Title : LiveTvService.DecodeBase64(p.Title);
                 var description = p.IsPlainText ? p.Description : LiveTvService.DecodeBase64(p.Description);
-
-                var cats = p.Categories;
-                var isMovie = cats != null && cats.Exists(c => c.IndexOf("movie", System.StringComparison.OrdinalIgnoreCase) >= 0 || c.IndexOf("film", System.StringComparison.OrdinalIgnoreCase) >= 0);
-                var isSports = cats != null && cats.Exists(c => c.IndexOf("sport", System.StringComparison.OrdinalIgnoreCase) >= 0);
-                var isSeries = !isMovie && !isSports;
                 try
                 {
-                    result.Add(new ProgramInfo
-                    {
-                        Id = string.Format(CultureInfo.InvariantCulture, "xtream_epg_{0}_{1}", streamId, p.StartTimestamp),
-                        ChannelId = tunerChannelId,
-                        StartDate = DateTimeOffset.FromUnixTimeSeconds(p.StartTimestamp).UtcDateTime,
-                        EndDate = DateTimeOffset.FromUnixTimeSeconds(p.StopTimestamp).UtcDateTime,
-                        Name = string.IsNullOrEmpty(title) ? "Unknown" : title,
-                        Overview = string.IsNullOrEmpty(description) ? null : description,
-                        EpisodeTitle = string.IsNullOrEmpty(p.SubTitle) ? null : p.SubTitle,
-                        IsLive = p.IsLive,
-                        IsRepeat = p.IsPreviouslyShown,
-                        IsPremiere = p.IsNew || p.IsPremiere,
-                        ImageUrl = IsValidHttpUrl(p.ImageUrl) ? p.ImageUrl : null,
-                        Genres = cats ?? new List<string>(),
-                        IsSports = isSports,
-                        IsNews = cats != null && cats.Exists(c => c.IndexOf("news", System.StringComparison.OrdinalIgnoreCase) >= 0),
-                        IsMovie = isMovie,
-                        IsKids = cats != null && cats.Exists(c => c.IndexOf("children", System.StringComparison.OrdinalIgnoreCase) >= 0 || c.IndexOf("kids", System.StringComparison.OrdinalIgnoreCase) >= 0),
-                        IsSeries = isSeries,
-                        SeriesId = isSeries && !string.IsNullOrEmpty(title) ? title.ToLowerInvariant() : null,
-                    });
+                    result.Add(BuildProgramInfo(p, streamId, tunerChannelId, title, description));
                 }
                 catch (Exception ex)
                 {
@@ -228,6 +203,48 @@ namespace Emby.Xtream.Plugin.Service
 
             Logger.Debug("GetProgramsInternal: returning {0} programs for channel {1}", result.Count, streamId);
             return result;
+        }
+
+        /// <summary>
+        /// Converts a single <see cref="EpgProgram"/> into a <see cref="ProgramInfo"/> ready for
+        /// Emby. Extracted as an internal static so it can be unit-tested without Emby DI.
+        /// </summary>
+        internal static ProgramInfo BuildProgramInfo(
+            EpgProgram p, int streamId, string tunerChannelId,
+            string title, string description)
+        {
+            var cats = p.Categories;
+            var isMovie = cats != null && cats.Exists(c =>
+                c.IndexOf("movie", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                c.IndexOf("film", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            var isSports = cats != null && cats.Exists(c =>
+                c.IndexOf("sport", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            var isSeries = !isMovie && !isSports;
+
+            return new ProgramInfo
+            {
+                Id = string.Format(CultureInfo.InvariantCulture, "xtream_epg_{0}_{1}", streamId, p.StartTimestamp),
+                ChannelId = tunerChannelId,
+                StartDate = DateTimeOffset.FromUnixTimeSeconds(p.StartTimestamp).UtcDateTime,
+                EndDate = DateTimeOffset.FromUnixTimeSeconds(p.StopTimestamp).UtcDateTime,
+                Name = string.IsNullOrEmpty(title) ? "Unknown" : title,
+                Overview = string.IsNullOrEmpty(description) ? null : description,
+                EpisodeTitle = string.IsNullOrEmpty(p.SubTitle) ? null : p.SubTitle,
+                IsLive = p.IsLive,
+                IsRepeat = p.IsPreviouslyShown,
+                IsPremiere = p.IsNew || p.IsPremiere,
+                ImageUrl = IsValidHttpUrl(p.ImageUrl) ? p.ImageUrl : null,
+                Genres = cats ?? new List<string>(),
+                IsSports = isSports,
+                IsNews = cats != null && cats.Exists(c =>
+                    c.IndexOf("news", System.StringComparison.OrdinalIgnoreCase) >= 0),
+                IsMovie = isMovie,
+                IsKids = cats != null && cats.Exists(c =>
+                    c.IndexOf("children", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    c.IndexOf("kids", System.StringComparison.OrdinalIgnoreCase) >= 0),
+                IsSeries = isSeries,
+                SeriesId = isSeries && !string.IsNullOrEmpty(title) ? title.ToLowerInvariant() : null,
+            };
         }
 
         protected override async Task<List<ChannelInfo>> GetChannelsInternal(
