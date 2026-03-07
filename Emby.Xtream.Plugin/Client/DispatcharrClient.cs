@@ -75,22 +75,23 @@ namespace Emby.Xtream.Plugin.Client
         /// Optional set of Dispatcharr channel IDs (ch.Id) to include.
         /// When null, all channels are included (no profile filtering).
         /// </param>
-        public async Task<(Dictionary<int, string> UuidMap, Dictionary<int, StreamStatsInfo> StatsMap, Dictionary<int, string> TvgIdMap, Dictionary<int, string> StationIdMap, HashSet<int> AllowedStreamIds)>
+        public async Task<(Dictionary<int, string> UuidMap, Dictionary<int, StreamStatsInfo> StatsMap, Dictionary<int, string> TvgIdMap, Dictionary<int, string> StationIdMap, HashSet<int> AllowedStreamIds, Dictionary<int, double> ChannelNumberMap)>
             GetChannelDataAsync(string baseUrl, CancellationToken cancellationToken, HashSet<int> enabledChannelIds = null)
         {
             var uuidMap = new Dictionary<int, string>();
             var statsMap = new Dictionary<int, StreamStatsInfo>();
             var tvgIdMap = new Dictionary<int, string>();
             var stationIdMap = new Dictionary<int, string>();
+            var channelNumberMap = new Dictionary<int, double>();
             HashSet<int> allowedStreamIds = enabledChannelIds != null ? new HashSet<int>() : null;
 
             var json = await GetAuthenticatedAsync(
                 baseUrl + "/api/channels/channels/?include_streams=true&limit=2000",
                 baseUrl, cancellationToken).ConfigureAwait(false);
-            if (json == null) return (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds);
+            if (json == null) return (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds, channelNumberMap);
 
             var channels = JsonSerializer.Deserialize<List<DispatcharrChannelWithStreams>>(json, JsonOptions);
-            if (channels == null) return (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds);
+            if (channels == null) return (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds, channelNumberMap);
 
             foreach (var ch in channels)
             {
@@ -134,6 +135,9 @@ namespace Emby.Xtream.Plugin.Client
                         && !statsMap.ContainsKey(sid))
                         statsMap[sid] = stream.StreamStats;
 
+                    if (ch.ChannelNumber.HasValue && !channelNumberMap.ContainsKey(sid))
+                        channelNumberMap[sid] = ch.ChannelNumber.Value;
+
                     allowedStreamIds?.Add(sid);
                 }
 
@@ -149,6 +153,9 @@ namespace Emby.Xtream.Plugin.Client
 
                 if (!string.IsNullOrEmpty(ch.TvcGuideStationId))
                     stationIdMap[ch.Id] = ch.TvcGuideStationId;
+
+                if (ch.ChannelNumber.HasValue)
+                    channelNumberMap[ch.Id] = ch.ChannelNumber.Value;
 
                 foreach (var stream in ch.Streams)
                 {
@@ -174,7 +181,7 @@ namespace Emby.Xtream.Plugin.Client
                     uuidMap.Count, statsMap.Count, tvgIdMap.Count, stationIdMap.Count);
             }
 
-            return (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds);
+            return (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds, channelNumberMap);
         }
 
         /// <summary>Returns the Dispatcharr VOD movie detail (UUID) for a given Xtream stream ID.</summary>

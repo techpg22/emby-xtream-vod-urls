@@ -40,6 +40,7 @@ namespace Emby.Xtream.Plugin.Service
         private volatile Dictionary<int, string> _channelUuidMap = new Dictionary<int, string>();
         private volatile Dictionary<int, string> _tvgIdMap = new Dictionary<int, string>();
         private volatile Dictionary<int, string> _stationIdMap = new Dictionary<int, string>();
+        private volatile Dictionary<int, double> _channelNumberMap = new Dictionary<int, double>();
         private volatile Dictionary<string, int> _tunerChannelIdToStreamId = new Dictionary<string, int>();
         private volatile bool _dispatcharrDataLoaded;
         private volatile HashSet<int> _allowedStreamIds;
@@ -339,13 +340,14 @@ namespace Emby.Xtream.Plugin.Service
                             config.SelectedDispatcharrProfileIds.Length, enabledChannelIds.Count);
                     }
 
-                    var (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds) =
+                    var (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds, channelNumberMap) =
                         await _dispatcharrClient.GetChannelDataAsync(
                             config.DispatcharrUrl, cancellationToken, enabledChannelIds).ConfigureAwait(false);
                     newStats = statsMap;
                     _channelUuidMap = uuidMap;
                     _tvgIdMap = tvgIdMap;
                     _stationIdMap = stationIdMap;
+                    _channelNumberMap = channelNumberMap;
                     _allowedStreamIds = allowedStreamIds;
                     _dispatcharrDataLoaded = true;
                 }
@@ -421,12 +423,27 @@ namespace Emby.Xtream.Plugin.Service
 
                 newTunerChannelIdToStreamId[tunerChannelId] = channel.StreamId;
 
+                string channelNumber;
+                if (config.EnableDispatcharr
+                    && _channelNumberMap.TryGetValue(channel.StreamId, out var dispatcharrNum))
+                {
+                    // Use Dispatcharr's real channel_number (supports decimals like 2.1).
+                    // Format as integer when there is no fractional part (e.g. 5.0 → "5").
+                    channelNumber = dispatcharrNum == Math.Floor(dispatcharrNum)
+                        ? ((int)dispatcharrNum).ToString(CultureInfo.InvariantCulture)
+                        : dispatcharrNum.ToString("G", CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    channelNumber = channel.Num.ToString(CultureInfo.InvariantCulture);
+                }
+
                 return new ChannelInfo
                 {
                     Id = CreateEmbyChannelId(tuner, streamIdStr),
                     TunerChannelId = tunerChannelId,
                     Name = cleanName,
-                    Number = channel.Num.ToString(CultureInfo.InvariantCulture),
+                    Number = channelNumber,
                     ImageUrl = string.IsNullOrEmpty(channel.StreamIcon) ? null : channel.StreamIcon,
                     ChannelType = ChannelType.TV,
                     TunerHostId = tuner.Id,
@@ -542,6 +559,7 @@ namespace Emby.Xtream.Plugin.Service
             _channelUuidMap = new Dictionary<int, string>();
             _tvgIdMap = new Dictionary<int, string>();
             _stationIdMap = new Dictionary<int, string>();
+            _channelNumberMap = new Dictionary<int, double>();
             _tunerChannelIdToStreamId = new Dictionary<string, int>();
             _allowedStreamIds = null;
             _dispatcharrDataLoaded = false;
@@ -593,13 +611,14 @@ namespace Emby.Xtream.Plugin.Service
                     }
                 }
 
-                var (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds) =
+                var (uuidMap, statsMap, tvgIdMap, stationIdMap, allowedStreamIds, channelNumberMap) =
                     await _dispatcharrClient.GetChannelDataAsync(
                         config.DispatcharrUrl, cancellationToken, enabledChannelIds).ConfigureAwait(false);
                 if (statsMap.Count > 0) _streamStats = statsMap;
                 if (uuidMap.Count > 0) _channelUuidMap = uuidMap;
                 if (tvgIdMap.Count > 0) _tvgIdMap = tvgIdMap;
                 if (stationIdMap.Count > 0) _stationIdMap = stationIdMap;
+                if (channelNumberMap.Count > 0) _channelNumberMap = channelNumberMap;
                 _allowedStreamIds = allowedStreamIds;
                 _dispatcharrDataLoaded = true;
                 Logger.Info("Loaded {0} UUIDs and {1} stream stats from Dispatcharr on-demand",

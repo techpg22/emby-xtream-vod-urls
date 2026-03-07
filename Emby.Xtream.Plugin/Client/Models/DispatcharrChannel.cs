@@ -39,6 +39,9 @@ namespace Emby.Xtream.Plugin.Client.Models
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
 
+        [JsonPropertyName("channel_number")]
+        public double? ChannelNumber { get; set; }
+
         [JsonPropertyName("tvg_id")]
         public string TvgId { get; set; }
 
