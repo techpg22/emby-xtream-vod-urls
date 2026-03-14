@@ -408,14 +408,21 @@ namespace Emby.Xtream.Plugin.Service
                         var isAnyNewFile = false;
                         foreach (var entry in strmEntries)
                         {
-                            var isNewFile = !File.Exists(entry.Item1);
-                            File.WriteAllText(entry.Item1, entry.Item2);
-                            if (isNewFile)
+                            var itemPath = entry.Item1;
+                            var itemUrl = entry.Item2;
+                            var fileExists = File.Exists(itemPath);
+
+                            // Content-aware check
+                            if (!fileExists || File.ReadAllText(itemPath) != itemUrl)
                             {
-                                Interlocked.Increment(ref _movieProgress.Added);
-                                isAnyNewFile = true;
+                                File.WriteAllText(itemPath, itemUrl);
+                                if (!fileExists)
+                                {
+                                    Interlocked.Increment(ref _movieProgress.Added);
+                                    isAnyNewFile = true;
+                                }
                             }
-                            lock (writtenPaths) { writtenPaths.Add(entry.Item1); }
+                            lock (writtenPaths) { writtenPaths.Add(itemPath); }
                         }
                         if (isAnyNewFile)
                         {
@@ -764,14 +771,34 @@ namespace Emby.Xtream.Plugin.Service
                                     "{0}/series/{1}/{2}/{3}.{4}",
                                     config.BaseUrl, config.Username, config.Password, episode.Id, ext);
 
-                                var isNewEpisode = !File.Exists(strmPath);
-                                Directory.CreateDirectory(seasonDir);
-                                File.WriteAllText(strmPath, streamUrl);
-                                Interlocked.Increment(ref _episodeProgress.Total);
-                                if (isNewEpisode)
-                                    Interlocked.Increment(ref _episodeProgress.Added);
+                                // --- START OF CONTENT-AWARE FIX ---
+                                var fileExists = File.Exists(strmPath);
+
+                                // Only write to disk if the file is missing OR content has changed
+                                if (!fileExists || File.ReadAllText(strmPath) != streamUrl)
+                                {
+                                    Directory.CreateDirectory(seasonDir);
+                                    File.WriteAllText(strmPath, streamUrl);
+
+                                    if (fileExists)
+                                    {
+                                        // It was an update, not a brand new file
+                                        Interlocked.Increment(ref _episodeProgress.Skipped);
+                                    }
+                                    else
+                                    {
+                                        // Brand new file created
+                                        Interlocked.Increment(ref _episodeProgress.Added);
+                                    }
+                                }
                                 else
+                                {
+                                    // File exists and content is identical; skip write to preserve timestamp
                                     Interlocked.Increment(ref _episodeProgress.Skipped);
+                                }
+
+                                Interlocked.Increment(ref _episodeProgress.Total);
+                                // --- END OF CONTENT-AWARE FIX ---ß
 
                                 lock (writtenPaths)
                                 {
@@ -971,10 +998,20 @@ namespace Emby.Xtream.Plugin.Service
                 "{0}/movie/{1}/{2}/{3}.{4}",
                 config.BaseUrl, config.Username, config.Password, item.StreamId, ext);
 
-            var isNewFile = !File.Exists(strmPath);
-            Directory.CreateDirectory(movieDir);
-            File.WriteAllText(strmPath, streamUrl);
-            if (isNewFile) Interlocked.Increment(ref _movieProgress.Added);
+            var fileExists = File.Exists(strmPath);
+
+            // Content-aware check
+            if (!fileExists || File.ReadAllText(strmPath) != streamUrl)
+            {
+                Directory.CreateDirectory(movieDir);
+                File.WriteAllText(strmPath, streamUrl);
+
+                if (!fileExists)
+                {
+                    Interlocked.Increment(ref _movieProgress.Added);
+                }
+            }
+
             lock (writtenPaths) { writtenPaths.Add(strmPath); }
 
             if (config.EnableNfoFiles && !string.IsNullOrEmpty(item.TmdbId))
@@ -1025,14 +1062,25 @@ namespace Emby.Xtream.Plugin.Service
                     var epFile = string.Format(CultureInfo.InvariantCulture,
                         "S{0:D2}E{1:D2}.strm", seasonNum, ep.EpisodeNum);
                     var epPath = Path.Combine(seasonDir, epFile);
-                    if (File.Exists(epPath)) continue;
 
                     var ext = !string.IsNullOrEmpty(ep.ContainerExtension) ? ep.ContainerExtension : "mp4";
                     var epUrl = string.Format(CultureInfo.InvariantCulture,
                         "{0}/series/{1}/{2}/{3}.{4}",
                         config.BaseUrl, config.Username, config.Password, ep.Id, ext);
-                    File.WriteAllText(epPath, epUrl);
-                    Interlocked.Increment(ref _movieProgress.Added);
+
+                    var fileExists = File.Exists(epPath);
+
+                    // Content-aware check: Only write if file is missing OR content is different
+                    if (!fileExists || File.ReadAllText(epPath) != epUrl)
+                    {
+                        Directory.CreateDirectory(seasonDir);
+                        File.WriteAllText(epPath, epUrl);
+
+                        if (!fileExists)
+                        {
+                            Interlocked.Increment(ref _seriesProgress.Added);
+                        }
+                    }
                 }
             }
         }
