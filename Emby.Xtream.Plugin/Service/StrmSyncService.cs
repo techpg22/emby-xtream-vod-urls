@@ -780,14 +780,8 @@ namespace Emby.Xtream.Plugin.Service
                                     Directory.CreateDirectory(seasonDir);
                                     File.WriteAllText(strmPath, streamUrl);
 
-                                    if (fileExists)
+                                    if (!fileExists)
                                     {
-                                        // It was an update, not a brand new file
-                                        Interlocked.Increment(ref _episodeProgress.Skipped);
-                                    }
-                                    else
-                                    {
-                                        // Brand new file created
                                         Interlocked.Increment(ref _episodeProgress.Added);
                                     }
                                 }
