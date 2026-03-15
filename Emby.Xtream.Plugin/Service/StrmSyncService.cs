@@ -412,7 +412,7 @@ namespace Emby.Xtream.Plugin.Service
                             var itemUrl = entry.Item2;
                             var fileExists = File.Exists(itemPath);
 
-                            // Content-aware check
+                            // Skip write if file content is already up to date (avoids Emby library re-scan)
                             if (!fileExists || File.ReadAllText(itemPath) != itemUrl)
                             {
                                 File.WriteAllText(itemPath, itemUrl);
@@ -771,10 +771,8 @@ namespace Emby.Xtream.Plugin.Service
                                     "{0}/series/{1}/{2}/{3}.{4}",
                                     config.BaseUrl, config.Username, config.Password, episode.Id, ext);
 
-                                // --- START OF CONTENT-AWARE FIX ---
+                                // Skip write if file content is already up to date (avoids Emby library re-scan)
                                 var fileExists = File.Exists(strmPath);
-
-                                // Only write to disk if the file is missing OR content has changed
                                 if (!fileExists || File.ReadAllText(strmPath) != streamUrl)
                                 {
                                     Directory.CreateDirectory(seasonDir);
@@ -787,12 +785,10 @@ namespace Emby.Xtream.Plugin.Service
                                 }
                                 else
                                 {
-                                    // File exists and content is identical; skip write to preserve timestamp
                                     Interlocked.Increment(ref _episodeProgress.Skipped);
                                 }
 
                                 Interlocked.Increment(ref _episodeProgress.Total);
-                                // --- END OF CONTENT-AWARE FIX ---ß
 
                                 lock (writtenPaths)
                                 {
@@ -994,7 +990,7 @@ namespace Emby.Xtream.Plugin.Service
 
             var fileExists = File.Exists(strmPath);
 
-            // Content-aware check
+            // Skip write if file content is already up to date (avoids Emby library re-scan)
             if (!fileExists || File.ReadAllText(strmPath) != streamUrl)
             {
                 Directory.CreateDirectory(movieDir);
@@ -1064,7 +1060,7 @@ namespace Emby.Xtream.Plugin.Service
 
                     var fileExists = File.Exists(epPath);
 
-                    // Content-aware check: Only write if file is missing OR content is different
+                    // Skip write if file content is already up to date (avoids Emby library re-scan)
                     if (!fileExists || File.ReadAllText(epPath) != epUrl)
                     {
                         Directory.CreateDirectory(seasonDir);
